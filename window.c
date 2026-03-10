@@ -40,8 +40,12 @@ typedef struct{
 }Camera;
 Camera offscreen_camera;
 
-
-slg_buffer mvp_buffer;
+struct{
+    Mat4 mvp_mat;
+    Mat4 model_mat;
+    Mat4 normal_mat;
+}Transform_Matrices; 
+slg_buffer transform_buffer;
 
 slg_pass offscreen_pass = {0};
 
@@ -154,12 +158,7 @@ void init(){
     offscreen_camera.projection = perspectiveMat4_Z0(1.0472f,aspect,0.1f,100.0f);
     mvpMat4 = mulMat4(mulMat4(offscreen_camera.projection,offscreen_camera.view),m_model);
 
-    mvp_buffer = slg_make_buffer(&(slg_buffer_desc){
-        .buffer = (void*)&mvpMat4,
-        .buffer_size = sizeof(Mat4),
-        .buffer_stride = sizeof(Mat4),
-        .usage = SLG_BUFFER_USAGE_CONSTANT_BUFFER
-    });
+    
     //make offscreen pass here
     //I want it to fill in all of the necessary things for me
     //so I can just call offscreen pass later
@@ -173,12 +172,23 @@ void init(){
         .depth_stencil_desc.compare_func = SLG_COMPARISON_FUNC_LESS
     });
 
+   Transform_Matrices.model_mat = m_model;
+   Transform_Matrices.mvp_mat = mvpMat4;
+   Transform_Matrices.normal_mat = identityMat4();
+
+    transform_buffer = slg_make_buffer(&(slg_buffer_desc){
+        .buffer = (void*)&Transform_Matrices,
+        .buffer_size = sizeof(Transform_Matrices),
+        .buffer_stride = sizeof(Transform_Matrices),
+        .usage = SLG_BUFFER_USAGE_CONSTANT_BUFFER
+    });
     slg_bindings offscreen_bindings = slg_make_bindings(&(slg_bindings_desc){
         .index_buffer = index_buffer,
         .vertex_buffer = vertex_buffer,
         .uniforms = OFFSCREEN_PASS_HLSL_MAKE_UNIFORMS((OFFSCREEN_PASS_HLSL_UNIFORMS){
             .albedo = texture,
-            .MVPConstantBuffer = mvp_buffer
+            .TransformBuffer = transform_buffer,
+            //.LightPositions
         })
     });
 
@@ -231,11 +241,10 @@ void frame(){
 
     //probably do my offscreen rendering pass here
     if(pass_resize.changed_resolution){
-        Mat4 m_model = identityMat4();
         float new_aspect = (float)pass_resize.new_width/(float)pass_resize.new_height;
         offscreen_camera.projection = perspectiveMat4_Z0(1.0472f,new_aspect,0.1f,100.0f);
-        Mat4 mvpMat4 = mulMat4(mulMat4(offscreen_camera.projection,offscreen_camera.view),m_model);
-        slg_update_buffer(mvp_buffer,(void*)&mvpMat4,sizeof(mvpMat4));
+        Transform_Matrices.mvp_mat = mulMat4(mulMat4(offscreen_camera.projection,offscreen_camera.view),Transform_Matrices.model_mat);
+        slg_update_buffer(transform_buffer,(void*)&Transform_Matrices,sizeof(Transform_Matrices));
         slg_update_render_texture(&offscreen_pass.color_target,(UINT)pass_resize.new_width,(UINT)pass_resize.new_height);
         slg_update_depth_texture(&offscreen_pass.depth_target,(UINT)pass_resize.new_width,(UINT)pass_resize.new_height);
         offscreen_pass.initialized = false;
