@@ -15,7 +15,6 @@
 #include "mathUtil.h"
 #include "offscreen_pass_hlsl.h"
 
-
 typedef struct Render_Window{
     int width;
     int height;
@@ -41,8 +40,16 @@ typedef struct{
 }Camera;
 Camera offscreen_camera;
 
+
+slg_buffer mvp_buffer;
+
 slg_pass offscreen_pass = {0};
 
+struct{
+    bool changed_resolution;
+    int new_width;
+    int new_height;
+}pass_resize;
 
 
 
@@ -147,7 +154,7 @@ void init(){
     offscreen_camera.projection = perspectiveMat4_Z0(1.0472f,aspect,0.1f,100.0f);
     mvpMat4 = mulMat4(mulMat4(offscreen_camera.projection,offscreen_camera.view),m_model);
 
-    slg_buffer mvp_buffer = slg_make_buffer(&(slg_buffer_desc){
+    mvp_buffer = slg_make_buffer(&(slg_buffer_desc){
         .buffer = (void*)&mvpMat4,
         .buffer_size = sizeof(Mat4),
         .buffer_stride = sizeof(Mat4),
@@ -156,10 +163,8 @@ void init(){
     //make offscreen pass here
     //I want it to fill in all of the necessary things for me
     //so I can just call offscreen pass later
-    slg_render_texture color_render_target = slg_make_render_target(800,600);
-
-
-    slg_depth_texture depth_render_target = slg_make_depth_target(800,600);
+    slg_render_texture color_render_target = slg_make_render_target(656,565);
+    slg_depth_texture depth_render_target = slg_make_depth_target(656,565);
 
     slg_pipeline offscreen_pip = slg_make_pipeline(&(slg_pipeline_desc){
         .shader = slg_make_shader(&OFFSCREEN_PASS_SHADER_DESC),
@@ -192,6 +197,14 @@ void material_editor(){
     
     // Remove padding so child is seamless
     igPushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0, 0});
+    
+
+    igBeginChild("Parameter_Window",(ImVec2){120,0},false,ImGuiWindowFlags_None);
+    {
+
+    }
+    igEndChild();
+    igSameLine();
     ImVec2 available_space =  igGetContentRegionAvail();
     igBeginChild(
         "material_editor_child",
@@ -199,9 +212,14 @@ void material_editor(){
         false,            // no border
         ImGuiWindowFlags_None
     );
-
-    igText("Material Editor");
-    igImage((ImTextureID)&offscreen_pass.color_target,(ImVec2){(float)offscreen_pass.color_target.tex.width,(float)offscreen_pass.color_target.tex.height});
+    //(ImVec2){(float)offscreen_pass.color_target.tex.width,(float)offscreen_pass.color_target.tex.height}
+    if(available_space.x != offscreen_pass.color_target.tex.width || available_space.y != offscreen_pass.color_target.tex.height){
+        pass_resize.changed_resolution = true;
+        pass_resize.new_width = available_space.x;
+        pass_resize.new_height = available_space.y;
+    }
+   
+    igImage((ImTextureID)&offscreen_pass.color_target,available_space);
     igEndChild();
     igPopStyleVarEx(1);
 
@@ -212,7 +230,17 @@ void frame(){
 
 
     //probably do my offscreen rendering pass here
-
+    if(pass_resize.changed_resolution){
+        Mat4 m_model = identityMat4();
+        float new_aspect = (float)pass_resize.new_width/(float)pass_resize.new_height;
+        offscreen_camera.projection = perspectiveMat4_Z0(1.0472f,new_aspect,0.1f,100.0f);
+        Mat4 mvpMat4 = mulMat4(mulMat4(offscreen_camera.projection,offscreen_camera.view),m_model);
+        slg_update_buffer(mvp_buffer,(void*)&mvpMat4,sizeof(mvpMat4));
+        slg_update_render_texture(&offscreen_pass.color_target,(UINT)pass_resize.new_width,(UINT)pass_resize.new_height);
+        slg_update_depth_texture(&offscreen_pass.depth_target,(UINT)pass_resize.new_width,(UINT)pass_resize.new_height);
+        offscreen_pass.initialized = false;
+        pass_resize.changed_resolution = false;
+    }
     slg_begin_offscreen_pass(&offscreen_pass);
     slg_set_pipeline(&offscreen_pass.pip);
     slg_set_bindings(&offscreen_pass.bind);

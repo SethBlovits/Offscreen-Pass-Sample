@@ -1733,6 +1733,133 @@ slg_texture _slg_d3d12_make_texture(slg_texture_desc* texture_desc){
     tex->resource_type = SLG_RESOURCE_TEXTURE;
     return *tex;
 }
+/*
+THIS IS USED FOR WHEN WE NEED TO RESIZE THE RENDER TEXTURE
+*/
+void _slg_d3d12_update_render_texture(slg_render_texture* rt, UINT width,UINT height){
+    slg_desc_t* desc = &slg_d3d12_state.desc;
+
+    rt->tex.buffer->lpVtbl->Release(rt->tex.buffer);
+    rt->heap->lpVtbl->Release(rt->heap);
+    rt->srv_heap->lpVtbl->Release(rt->srv_heap);
+
+    D3D12_RESOURCE_DESC textureDesc = {0};
+    textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    textureDesc.Width = width;
+    textureDesc.Height = height;
+    textureDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    textureDesc.DepthOrArraySize = 1;
+    textureDesc.MipLevels = 1;
+    textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    textureDesc.SampleDesc.Count = 1;
+    textureDesc.SampleDesc.Quality = 0;
+    textureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+
+    D3D12_HEAP_PROPERTIES tex_heapProps = {0};
+    tex_heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+    tex_heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    tex_heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+    tex_heapProps.CreationNodeMask = 1;
+    tex_heapProps.VisibleNodeMask = 1;
+
+    D3D12_CLEAR_VALUE clear_val = {0};
+    clear_val.Format   = DXGI_FORMAT_R8G8B8A8_UNORM;
+    clear_val.Color[0] = 0.0f;
+    clear_val.Color[1] = 0.0f;
+    clear_val.Color[2] = 0.0f;
+    clear_val.Color[3] = 1.0f;
+
+    d3d12_throwIfFailed(desc->device->lpVtbl->CreateCommittedResource(desc->device,
+    &tex_heapProps,
+    D3D12_HEAP_FLAG_NONE,
+    &textureDesc,
+    D3D12_RESOURCE_STATE_RENDER_TARGET,
+    &clear_val,
+    &IID_ID3D12Resource,
+    (void**)&rt->tex.buffer
+    ));
+
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {
+        .NumDescriptors = 1,
+        .Type           = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+        .Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_NONE
+    };
+
+    desc->device->lpVtbl->CreateDescriptorHeap(desc->device,&heap_desc,&IID_ID3D12DescriptorHeap,(void**)&rt->heap);
+
+    rt->heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(rt->heap,&rt->handle);
+    
+    desc->device->lpVtbl->CreateRenderTargetView(desc->device,rt->tex.buffer,NULL,rt->handle);
+
+    D3D12_DESCRIPTOR_HEAP_DESC srv_heap_desc = {
+        .NumDescriptors = 1,
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
+    };
+
+    d3d12_throwIfFailed(desc->device->lpVtbl->CreateDescriptorHeap(desc->device, &srv_heap_desc,&IID_ID3D12DescriptorHeap,(void**)&rt->srv_heap));
+    
+    D3D12_CPU_DESCRIPTOR_HANDLE srv_cpu_handle;
+    rt->srv_heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(rt->srv_heap, &srv_cpu_handle);
+    rt->srv_heap->lpVtbl->GetGPUDescriptorHandleForHeapStart(rt->srv_heap, &rt->srv_gpu_handle);
+
+    desc->device->lpVtbl->CreateShaderResourceView(desc->device, rt->tex.buffer, NULL, srv_cpu_handle);
+
+    rt->tex.width = width;
+    rt->tex.height = height;
+
+}
+void _slg_d3d12_update_depth_texture(slg_depth_texture* dt,UINT width,UINT height){
+    slg_desc_t* desc = &slg_d3d12_state.desc;
+
+    // release old resources
+    dt->tex.buffer->lpVtbl->Release(dt->tex.buffer);
+    dt->heap->lpVtbl->Release(dt->heap);
+
+    D3D12_RESOURCE_DESC tex_desc = {0};
+    tex_desc.Dimension          = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    tex_desc.Width              = width;
+    tex_desc.Height             = height;
+    tex_desc.Flags              = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    tex_desc.DepthOrArraySize   = 1;
+    tex_desc.MipLevels          = 1;
+    tex_desc.Format             = DXGI_FORMAT_D32_FLOAT;
+    tex_desc.SampleDesc.Count   = 1;
+    tex_desc.SampleDesc.Quality = 0;
+    tex_desc.Layout             = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+
+    D3D12_HEAP_PROPERTIES heap_props = {0};
+    heap_props.Type                 = D3D12_HEAP_TYPE_DEFAULT;
+    heap_props.CPUPageProperty      = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    heap_props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+    heap_props.CreationNodeMask     = 1;
+    heap_props.VisibleNodeMask      = 1;
+
+    D3D12_CLEAR_VALUE clear_val = {0};
+    clear_val.Format               = DXGI_FORMAT_D32_FLOAT;
+    clear_val.DepthStencil.Depth   = 1.0f;
+    clear_val.DepthStencil.Stencil = 0;
+
+    d3d12_throwIfFailed(desc->device->lpVtbl->CreateCommittedResource(
+        desc->device, &heap_props, D3D12_HEAP_FLAG_NONE,
+        &tex_desc, D3D12_RESOURCE_STATE_DEPTH_WRITE,
+        &clear_val, &IID_ID3D12Resource,
+        (void**)&dt->tex.buffer
+    ));
+
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {
+        .NumDescriptors = 1,
+        .Type           = D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
+        .Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_NONE
+    };
+    desc->device->lpVtbl->CreateDescriptorHeap(desc->device, &heap_desc, &IID_ID3D12DescriptorHeap, (void**)&dt->heap);
+    dt->heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(dt->heap, &dt->handle);
+    desc->device->lpVtbl->CreateDepthStencilView(desc->device, dt->tex.buffer, NULL, dt->handle);
+
+    dt->tex.width  = width;
+    dt->tex.height = height;
+}
+
 slg_render_texture _slg_d3d12_make_render_texture(UINT width, UINT height){
     slg_texture* tex = {0};
     tex = pool_alloc(&slg_pools.texture_pool);
@@ -1800,7 +1927,7 @@ slg_render_texture _slg_d3d12_make_render_texture(UINT width, UINT height){
     };
 
     d3d12_throwIfFailed(desc->device->lpVtbl->CreateDescriptorHeap(desc->device, &srv_heap_desc,&IID_ID3D12DescriptorHeap,(void**)&render_tex->srv_heap));
-
+    
     D3D12_CPU_DESCRIPTOR_HANDLE srv_cpu_handle;
     render_tex->srv_heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(render_tex->srv_heap, &srv_cpu_handle);
     render_tex->srv_heap->lpVtbl->GetGPUDescriptorHandleForHeapStart(render_tex->srv_heap, &render_tex->srv_gpu_handle);
@@ -2404,6 +2531,16 @@ slg_heap slg_make_heap(slg_heap_desc* heap_desc){
         //CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&descriptorHeap));
 
 }
+void slg_update_render_texture(slg_render_texture* rt,UINT width, UINT height){
+    #ifdef SLG_D3D12
+    _slg_d3d12_update_render_texture(rt,width,height);
+    #endif
+}
+void slg_update_depth_texture(slg_depth_texture* dt,UINT width, UINT height){
+    #ifdef SLG_D3D12
+    _slg_d3d12_update_depth_texture(dt,width,height);
+    #endif
+}
 
 slg_render_texture slg_make_render_target(UINT width,UINT height){
     slg_render_texture tex;
@@ -2778,7 +2915,7 @@ void _slg_d3d12_inject_render_texture(slg_render_texture* rt){
 
     ID3D12DescriptorHeap* srv_heap = rt->srv_heap;
     desc->commandList->lpVtbl->SetDescriptorHeaps(desc->commandList, 1, &srv_heap);
-    
+
     D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
     srv_heap->lpVtbl->GetGPUDescriptorHandleForHeapStart(srv_heap, &gpu_handle);
     desc->commandList->lpVtbl->SetGraphicsRootDescriptorTable(desc->commandList, 1, gpu_handle); // slot 1 is SRV
