@@ -25,6 +25,7 @@ const char g_szClassName[] = "myWindowClass";
 
 typedef struct{
     Vector3 position;
+    Vector3 normal;
     Vector2 uv;
 }Vertex;
 
@@ -47,6 +48,20 @@ struct{
 }Transform_Matrices; 
 slg_buffer transform_buffer;
 
+typedef struct{
+    Vector3 position; // 12 bytes
+    float  intensity; // 4 bytes
+    Vector3 color; // 12 bytes
+    float  radius; // 4 bytes
+}light;
+typedef struct{
+    light lights[16];
+    int num_lights;
+    float padding[3];
+}light_sources;
+
+light main_light;
+slg_buffer light_buffer;
 slg_pass offscreen_pass = {0};
 
 struct{
@@ -71,41 +86,36 @@ void init(){
     //DEMO CUBE RESOURCES
 
     Vertex cubeVertices[] = {
-        // Front face (-Z)
-        { { -1, -1, -1 }, { 0, 1 } },
-        { {  1, -1, -1 }, { 1, 1 } },
-        { {  1,  1, -1 }, { 1, 0 } },
-        { { -1,  1, -1 }, { 0, 0 } },
-
-        // Back face (+Z)
-        { { -1, -1,  1 }, { 1, 1 } },
-        { {  1, -1,  1 }, { 0, 1 } },
-        { {  1,  1,  1 }, { 0, 0 } },
-        { { -1,  1,  1 }, { 1, 0 } },
-
-        // Left face (-X)
-        { { -1, -1, -1 }, { 0, 1 } },
-        { { -1,  1, -1 }, { 0, 0 } },
-        { { -1,  1,  1 }, { 1, 0 } },
-        { { -1, -1,  1 }, { 1, 1 } },
-
-        // Right face (+X)
-        { {  1, -1, -1 }, { 1, 1 } },
-        { {  1,  1, -1 }, { 1, 0 } },
-        { {  1,  1,  1 }, { 0, 0 } },
-        { {  1, -1,  1 }, { 0, 1 } },
-
-        // Bottom face (-Y)
-        { { -1, -1, -1 }, { 0, 1 } },
-        { { -1, -1,  1 }, { 0, 0 } },
-        { {  1, -1,  1 }, { 1, 0 } },
-        { {  1, -1, -1 }, { 1, 1 } },
-
-        // Top face (+Y)
-        { { -1,  1, -1 }, { 0, 0 } },
-        { { -1,  1,  1 }, { 0, 1 } },
-        { {  1,  1,  1 }, { 1, 1 } },
-        { {  1,  1, -1 }, { 1, 0 } },
+       // Front face (-Z)  normal = 0, 0, -1
+    { {-1,-1,-1}, { 0, 0,-1}, {0,1} },
+    { { 1,-1,-1}, { 0, 0,-1}, {1,1} },
+    { { 1, 1,-1}, { 0, 0,-1}, {1,0} },
+    { {-1, 1,-1}, { 0, 0,-1}, {0,0} },
+    // Back face (+Z)   normal = 0, 0, 1
+    { {-1,-1, 1}, { 0, 0, 1}, {1,1} },
+    { { 1,-1, 1}, { 0, 0, 1}, {0,1} },
+    { { 1, 1, 1}, { 0, 0, 1}, {0,0} },
+    { {-1, 1, 1}, { 0, 0, 1}, {1,0} },
+    // Left face (-X)   normal = -1, 0, 0
+    { {-1,-1,-1}, {-1, 0, 0}, {0,1} },
+    { {-1, 1,-1}, {-1, 0, 0}, {0,0} },
+    { {-1, 1, 1}, {-1, 0, 0}, {1,0} },
+    { {-1,-1, 1}, {-1, 0, 0}, {1,1} },
+    // Right face (+X)  normal = 1, 0, 0
+    { { 1,-1,-1}, { 1, 0, 0}, {1,1} },
+    { { 1, 1,-1}, { 1, 0, 0}, {1,0} },
+    { { 1, 1, 1}, { 1, 0, 0}, {0,0} },
+    { { 1,-1, 1}, { 1, 0, 0}, {0,1} },
+    // Bottom face (-Y) normal = 0, -1, 0
+    { {-1,-1,-1}, { 0,-1, 0}, {0,1} },
+    { {-1,-1, 1}, { 0,-1, 0}, {0,0} },
+    { { 1,-1, 1}, { 0,-1, 0}, {1,0} },
+    { { 1,-1,-1}, { 0,-1, 0}, {1,1} },
+    // Top face (+Y)    normal = 0, 1, 0
+    { {-1, 1,-1}, { 0, 1, 0}, {0,0} },
+    { {-1, 1, 1}, { 0, 1, 0}, {0,1} },
+    { { 1, 1, 1}, { 0, 1, 0}, {1,1} },
+    { { 1, 1,-1}, { 0, 1, 0}, {1,0} },
     };
 
     uint16_t cubeIndices[] = {
@@ -182,13 +192,32 @@ void init(){
         .buffer_stride = sizeof(Transform_Matrices),
         .usage = SLG_BUFFER_USAGE_CONSTANT_BUFFER
     });
+
+    light_sources light_data = {0};
+    main_light = (light){
+        .position  = {1.2f, 0.5f, 2.5f},
+        .intensity = 1.0f,
+        .color     = {1.0f, 1.0f, 1.0f},
+        .radius    = 10.0f
+    };
+    light_data.num_lights      = 1;
+    light_data.lights[0] = main_light;
+    light_buffer = slg_make_buffer(&(slg_buffer_desc){
+        .buffer = (void*)&light_data,
+        .buffer_size = sizeof(light_sources),
+        .buffer_stride = sizeof(light_sources),
+        .usage = SLG_BUFFER_USAGE_CONSTANT_BUFFER
+    });
+
+
+
     slg_bindings offscreen_bindings = slg_make_bindings(&(slg_bindings_desc){
         .index_buffer = index_buffer,
         .vertex_buffer = vertex_buffer,
         .uniforms = OFFSCREEN_PASS_HLSL_MAKE_UNIFORMS((OFFSCREEN_PASS_HLSL_UNIFORMS){
             .albedo = texture,
             .TransformBuffer = transform_buffer,
-            //.LightPositions
+            .LightPositions = light_buffer
         })
     });
 
@@ -211,6 +240,18 @@ void material_editor(){
 
     igBeginChild("Parameter_Window",(ImVec2){120,0},false,ImGuiWindowFlags_None);
     {
+        ImVec2 panel_avail = igGetContentRegionAvail();
+        igBeginChild("Asset_Name",(ImVec2){0,panel_avail.y*0.1f},false,ImGuiWindowFlags_None);
+        {
+            igText("Asset Name:");
+            igText("Default Name");
+        }
+        igEndChild();
+
+        igSliderFloat("Light X", &main_light.position.Elements[0], -20.0f, 20.0f);
+        igSliderFloat("Light Y", &main_light.position.Elements[1], -20.0f, 20.0f);
+        igSliderFloat("Light Z", &main_light.position.Elements[2], -20.0f, 20.0f);
+
 
     }
     igEndChild();
@@ -240,6 +281,12 @@ void frame(){
 
 
     //probably do my offscreen rendering pass here
+    light_sources light_data = {0};
+    light_data.num_lights      = 1;
+    light_data.lights[0] = main_light;
+    slg_update_buffer(light_buffer,&light_data,sizeof(light_data));
+
+
     if(pass_resize.changed_resolution){
         float new_aspect = (float)pass_resize.new_width/(float)pass_resize.new_height;
         offscreen_camera.projection = perspectiveMat4_Z0(1.0472f,new_aspect,0.1f,100.0f);
