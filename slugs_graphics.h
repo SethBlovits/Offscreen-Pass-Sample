@@ -492,6 +492,9 @@ typedef struct{
     DXGI_FORMAT format; //Used for SRV/UAV/RTV/DSV creation and determining bytes per pixel
     uint32_t stride; // for typed buffers: 0. For textures:unused
     uint64_t size_in_bytes; //used for buffer SRV's, raw buffers, copy operations, and memory tracking
+
+    //IF WE STORE THIS HERE IT WILL MAKE INJECTING A TEXTURE WITH IMGUI MUCH EASIER
+    ID3D12DescriptorHeap* srv_heap; 
 }slg_resource;
 typedef slg_resource slg_buffer; // alias slg_buffer as a resource type so we can use some of the same functions as textures
 
@@ -2357,13 +2360,16 @@ slg_bindings _slg_d3d12_make_bindings(slg_bindings_desc* bind_desc){
             D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {0};
             cbvDesc.BufferLocation = bind_desc->uniforms.cbv_buffer[i].buffer->lpVtbl->GetGPUVirtualAddress(bind_desc->uniforms.cbv_buffer[i].buffer);
             cbvDesc.SizeInBytes = (bind_desc->uniforms.cbv_buffer[i].size_in_bytes + 255) & ~255;
-            cbv_srv_uav_handle.ptr = cbv_srv_uav_handle.ptr + (cbv_srv_uav_inc_size * resource_count);
+           
             if(!found_resource){
                 bind.data_ptr->cbv_gpu_start = cbv_srv_uav_gpu_handle.ptr;
                 found_resource = true;
             }
             resource_count++;
             desc.device->lpVtbl->CreateConstantBufferView(desc.device,&cbvDesc,cbv_srv_uav_handle);
+             //cbv_srv_uav_handle.ptr = cbv_srv_uav_handle.ptr + (cbv_srv_uav_inc_size * resource_count);
+            cbv_srv_uav_handle.ptr += cbv_srv_uav_inc_size;
+            cbv_srv_uav_gpu_handle.ptr += cbv_srv_uav_inc_size;
         }
     }
     found_resource = false;
@@ -2385,14 +2391,17 @@ slg_bindings _slg_d3d12_make_bindings(slg_bindings_desc* bind_desc){
                 srvDesc.Texture2D.MostDetailedMip = 0;
                 srvDesc.Texture2D.MipLevels = temp_desc.MipLevels;
             }
-            cbv_srv_uav_handle.ptr = cbv_srv_uav_handle.ptr + (cbv_srv_uav_inc_size * resource_count);
-            cbv_srv_uav_gpu_handle.ptr = cbv_srv_uav_gpu_handle.ptr + (cbv_srv_uav_inc_size * resource_count);
+           
             if(!found_resource){
                 bind.data_ptr->srv_gpu_start = cbv_srv_uav_gpu_handle.ptr;
                 found_resource = true;
             }
             resource_count++;
             desc.device->lpVtbl->CreateShaderResourceView(desc.device,bind_desc->uniforms.srv_buffer[i].buffer,&srvDesc,cbv_srv_uav_handle);
+             //cbv_srv_uav_handle.ptr = cbv_srv_uav_handle.ptr + (cbv_srv_uav_inc_size * resource_count);
+            cbv_srv_uav_handle.ptr += cbv_srv_uav_inc_size;
+            //cbv_srv_uav_gpu_handle.ptr = cbv_srv_uav_gpu_handle.ptr + (cbv_srv_uav_inc_size * resource_count);
+            cbv_srv_uav_gpu_handle.ptr += cbv_srv_uav_inc_size;
 
         }
     }
@@ -2412,13 +2421,16 @@ slg_bindings _slg_d3d12_make_bindings(slg_bindings_desc* bind_desc){
             samplerDesc.MinLOD = 0.0f;
             samplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
 
-            sampler_handle.ptr = sampler_handle.ptr + (sampler_inc_size * sampler_resource_count);
-            sampler_gpu_handle.ptr = sampler_gpu_handle.ptr + (sampler_inc_size * sampler_resource_count);
+           
             if(!found_resource){
                 bind.data_ptr->sampler_gpu_start = sampler_gpu_handle.ptr;
                 found_resource = true;
             }
             desc.device->lpVtbl->CreateSampler(desc.device,&samplerDesc,sampler_handle);
+             //sampler_handle.ptr = sampler_handle.ptr + (sampler_inc_size * sampler_resource_count);
+            sampler_handle.ptr += sampler_inc_size;
+            //sampler_gpu_handle.ptr = sampler_gpu_handle.ptr + (sampler_inc_size * sampler_resource_count);
+            sampler_gpu_handle.ptr += sampler_inc_size;
             sampler_resource_count++;
         }
     }

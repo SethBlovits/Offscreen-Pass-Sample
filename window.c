@@ -15,6 +15,39 @@
 #include "mathUtil.h"
 #include "offscreen_pass_hlsl.h"
 
+#define APP_WIDTH 1920
+#define APP_HEIGHT 1080
+
+//struct to hold the spacing for all the options in the parameter panel
+
+/* 
+|This |
+---------------------------------
+|     |                         |
+|     |                         |
+|     |                         |
+|     |                         | 
+|     |                         |
+---------------------------------
+*/
+struct{
+    float panel_horiz;
+
+    float name_vert;
+    float tex_vert;
+    ImVec2 tex_image_size;
+
+}param_layout = {
+    .name_vert = 0.1f,
+    .panel_horiz = 0.1f,
+
+    .tex_vert = 0.2f,
+    .tex_image_size = {0.2f,0.2f} 
+
+};
+
+
+
 typedef struct Render_Window{
     int width;
     int height;
@@ -71,13 +104,18 @@ struct{
 }pass_resize;
 
 
+struct{
+    slg_texture albedo;
+    slg_render_texture normal;
+}object_textures;
+
 
 void init(){
     uint8_t arena_backingBuffer[131072];
     arena_init(&slg_arena,arena_backingBuffer,131072);
     slg_arena.name = "main_arena";
-    slg_d3d12_state.appdata.width = 800;
-    slg_d3d12_state.appdata.height = 600;
+    slg_d3d12_state.appdata.width = APP_WIDTH;
+    slg_d3d12_state.appdata.height = APP_HEIGHT;
     slg_d3d12_state.appdata.name = "test app";
     slg_d3d12_state.appdata.hwnd = app_get_window_handle();
     slg_setup();
@@ -151,6 +189,8 @@ void init(){
         .pixel_size = 4
     });
 
+    object_textures.albedo = texture;
+
     Mat4 mvpMat4 = identityMat4();
     Mat4 m_model = identityMat4();
     
@@ -164,7 +204,7 @@ void init(){
 
     //mainCamera.view = LookAt_RH(mainCamera.right,mainCamera.up,mainCamera.direction,mainCamera.position);
     offscreen_camera.view = LookAt_RH_Version2(offscreen_camera.position,(Vector3){0.0f,0.0f,0.0f},up);
-    float aspect = 800.0f/600.0f;
+    float aspect = APP_WIDTH/APP_HEIGHT;
     offscreen_camera.projection = perspectiveMat4_Z0(1.0472f,aspect,0.1f,100.0f);
     mvpMat4 = mulMat4(mulMat4(offscreen_camera.projection,offscreen_camera.view),m_model);
 
@@ -237,17 +277,26 @@ void material_editor(){
     // Remove padding so child is seamless
     igPushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0, 0});
     
-
-    igBeginChild("Parameter_Window",(ImVec2){120,0},false,ImGuiWindowFlags_None);
+    
+    igBeginChild("Parameter_Window",(ImVec2){igGetContentRegionAvail().x*param_layout.panel_horiz,0},false,ImGuiWindowFlags_None);
     {
         ImVec2 panel_avail = igGetContentRegionAvail();
-        igBeginChild("Asset_Name",(ImVec2){0,panel_avail.y*0.1f},false,ImGuiWindowFlags_None);
+        igBeginChild("Asset_Name",(ImVec2){0,panel_avail.y*param_layout.name_vert},false,ImGuiWindowFlags_None);
         {
             igText("Asset Name:");
             igText("Default Name");
         }
         igEndChild();
 
+        igBeginChild("Texture Preview",(ImVec2){0,panel_avail.y*param_layout.tex_vert},false,ImGuiWindowFlags_None);
+        {
+            ImVec2 image_avail = igGetContentRegionAvail();
+            ImVec2 image_size = {0};
+            image_size.x = image_avail.x * param_layout.tex_image_size.x;
+            image_size.y = image_avail.y * param_layout.tex_image_size.y;
+            igImage((ImTextureID)&object_textures.albedo,image_size);
+        }
+        igEndChild();
         igSliderFloat("Light X", &main_light.position.Elements[0], -20.0f, 20.0f);
         igSliderFloat("Light Y", &main_light.position.Elements[1], -20.0f, 20.0f);
         igSliderFloat("Light Z", &main_light.position.Elements[2], -20.0f, 20.0f);
@@ -389,8 +438,8 @@ int main(){
         .init_func = init,
         .cleanup_func = cleanup,
         .event_func = event,
-        .width = 800,
-        .height = 600
+        .width = APP_WIDTH,
+        .height = APP_HEIGHT
     });
     app_mainline();
 
