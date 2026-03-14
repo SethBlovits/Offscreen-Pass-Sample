@@ -37,12 +37,19 @@ struct{
     float tex_vert;
     ImVec2 tex_image_size;
 
+    float properties_vert;
+    float shader_vert;
+
 }param_layout = {
     .name_vert = 0.1f,
     .panel_horiz = 0.1f,
 
     .tex_vert = 0.2f,
-    .tex_image_size = {0.2f,0.2f} 
+    .tex_image_size = {0.2f,0.2f}, 
+
+    .properties_vert = 0.5f,
+
+    .shader_vert = 0.2f
 
 };
 
@@ -268,6 +275,22 @@ void init(){
     offscreen_pass.pip = offscreen_pip; 
   
     slg_close_setup();
+
+    igStyleColorsDark(igGetStyle());
+
+    ImGuiStyle* style = igGetStyle();
+    style->Colors[ImGuiCol_WindowBg]    = (ImVec4){0.08f, 0.08f, 0.08f, 1.0f};
+    style->Colors[ImGuiCol_ChildBg]     = (ImVec4){0.10f, 0.10f, 0.10f, 1.0f};
+    style->Colors[ImGuiCol_SliderGrab]  = (ImVec4){0.78f, 0.66f, 0.43f, 1.0f};
+    style->Colors[ImGuiCol_CheckMark]   = (ImVec4){0.78f, 0.66f, 0.43f, 1.0f};
+    style->Colors[ImGuiCol_Header]      = (ImVec4){0.78f, 0.66f, 0.43f, 0.3f};
+    style->Colors[ImGuiCol_HeaderHovered] = (ImVec4){0.78f, 0.66f, 0.43f, 0.5f};
+    style->Colors[ImGuiCol_FrameBg]        = (ImVec4){0.12f, 0.12f, 0.12f, 1.0f};
+    style->Colors[ImGuiCol_FrameBgHovered] = (ImVec4){0.16f, 0.16f, 0.16f, 1.0f};
+    style->Colors[ImGuiCol_FrameBgActive]  = (ImVec4){0.20f, 0.20f, 0.20f, 1.0f};
+    style->FrameRounding  = 3.0f;
+    style->GrabRounding   = 3.0f;
+    style->WindowRounding = 0.0f;
 }
 
 //breakout function for the material editor code;;
@@ -278,7 +301,7 @@ void material_editor(){
     igPushStyleVarImVec2(ImGuiStyleVar_WindowPadding, (ImVec2){0, 0});
     
     
-    igBeginChild("Parameter_Window",(ImVec2){igGetContentRegionAvail().x*param_layout.panel_horiz,0},false,ImGuiWindowFlags_None);
+    igBeginChild("Parameter_Window",(ImVec2){igGetContentRegionAvail().x*param_layout.panel_horiz,0},false,ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     {
         ImVec2 panel_avail = igGetContentRegionAvail();
         igBeginChild("Asset_Name",(ImVec2){0,panel_avail.y*param_layout.name_vert},false,ImGuiWindowFlags_None);
@@ -288,20 +311,50 @@ void material_editor(){
         }
         igEndChild();
 
-        igBeginChild("Texture Preview",(ImVec2){0,panel_avail.y*param_layout.tex_vert},false,ImGuiWindowFlags_None);
-        {
+        igBeginChild("Texture Maps",(ImVec2){0,panel_avail.y*param_layout.tex_vert},false,ImGuiWindowFlags_None);
+        {   
+            //igPushStyleColorImVec4(ImGuiCol_Text, (ImVec4){0.78f, 0.66f, 0.43f, 1.0f});
+          
+            igSeparatorText("Environment Settings");
+            //igPopStyleColor();
             ImVec2 image_avail = igGetContentRegionAvail();
             ImVec2 image_size = {0};
             image_size.x = image_avail.x * param_layout.tex_image_size.x;
             image_size.y = image_avail.y * param_layout.tex_image_size.y;
             igImage((ImTextureID)&object_textures.albedo,image_size);
+
+            //igImage(NULL,image_size);
+            //igImage(NULL,image_size);
+            //igImage(NULL,image_size);
+            //igImage((ImTextureID)&object_textures.albedo,image_size);
+            //igImage((ImTextureID)&object_textures.albedo,image_size);
+
+
+
         }
         igEndChild();
-        igSliderFloat("Light X", &main_light.position.Elements[0], -20.0f, 20.0f);
-        igSliderFloat("Light Y", &main_light.position.Elements[1], -20.0f, 20.0f);
-        igSliderFloat("Light Z", &main_light.position.Elements[2], -20.0f, 20.0f);
 
+        igBeginChild("Properties",(ImVec2){.x = 0,.y = panel_avail.y*param_layout.properties_vert},false,ImGuiWindowFlags_None);
+        {  
+            igSeparatorText("Properties");
+            igPushStyleVarImVec2(ImGuiStyleVar_FramePadding, (ImVec2){4.0f, 0.0f});
+            igPushStyleVar(ImGuiStyleVar_GrabMinSize, 8.0f);
+            igSliderFloat("Light X", &main_light.position.Elements[0], -20.0f, 20.0f);
+            igSliderFloat("Light Y", &main_light.position.Elements[1], -20.0f, 20.0f);
+            igSliderFloat("Light Z", &main_light.position.Elements[2], -20.0f, 20.0f);
+            igPopStyleVarEx(2);
 
+        }
+        igEndChild();
+
+        igBeginChild("Shader Preview",(ImVec2){.x = 0,.y = panel_avail.y * param_layout.shader_vert},false,ImGuiWindowFlags_None);
+        {
+            igSeparatorText("Shaders");
+
+            igButton("Custom Shader");
+            igButton("Standard Shader");
+        }
+        igEndChild();
     }
     igEndChild();
     igSameLine();
@@ -313,13 +366,13 @@ void material_editor(){
         ImGuiWindowFlags_None
     );
     //(ImVec2){(float)offscreen_pass.color_target.tex.width,(float)offscreen_pass.color_target.tex.height}
-    if(available_space.x != offscreen_pass.color_target.tex.width || available_space.y != offscreen_pass.color_target.tex.height){
+    if(available_space.x != offscreen_pass.color_target.tex->width || available_space.y != offscreen_pass.color_target.tex->height){
         pass_resize.changed_resolution = true;
         pass_resize.new_width = available_space.x;
         pass_resize.new_height = available_space.y;
     }
    
-    igImage((ImTextureID)&offscreen_pass.color_target,available_space);
+    igImage((ImTextureID)offscreen_pass.color_target.tex,available_space);
     igEndChild();
     igPopStyleVarEx(1);
 
@@ -398,7 +451,7 @@ void frame(){
 
 
     material_editor();
-
+    igShowDemoWindow(NULL);
     igEnd();
 
     slimgui_end_frame();

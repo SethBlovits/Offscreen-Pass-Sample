@@ -517,7 +517,7 @@ typedef slg_resource slg_texture;
 //for convenience sake I am going to create a render texture struct that holds onto a texture struct
 
 typedef struct{// if we are creating the render texture inside of a function in here then we need to make a pool f
-    slg_texture tex;
+    slg_texture* tex;
     
     //we also need the handles for use later
     ID3D12DescriptorHeap*       heap;   // keep alive
@@ -1731,6 +1731,17 @@ slg_texture _slg_d3d12_make_texture(slg_texture_desc* texture_desc){
         1,
         &barrier
     );
+
+    D3D12_DESCRIPTOR_HEAP_DESC srv_heap_desc = {
+        .NumDescriptors = 1,
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
+    };
+    d3d12_throwIfFailed(desc->device->lpVtbl->CreateDescriptorHeap(desc->device, &srv_heap_desc,&IID_ID3D12DescriptorHeap,(void**)&tex->srv_heap));
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle;
+    tex->srv_heap->lpVtbl->GetCPUDescriptorHandleForHeapStart( tex->srv_heap, &cpu_handle);
+    desc->device->lpVtbl->CreateShaderResourceView(desc->device, tex->buffer, NULL, cpu_handle);
+
     tex->width = texture_desc->width;
     tex->height = texture_desc->height;
     tex->resource_type = SLG_RESOURCE_TEXTURE;
@@ -1742,7 +1753,7 @@ THIS IS USED FOR WHEN WE NEED TO RESIZE THE RENDER TEXTURE
 void _slg_d3d12_update_render_texture(slg_render_texture* rt, UINT width,UINT height){
     slg_desc_t* desc = &slg_d3d12_state.desc;
 
-    rt->tex.buffer->lpVtbl->Release(rt->tex.buffer);
+    rt->tex->buffer->lpVtbl->Release(rt->tex->buffer);
     rt->heap->lpVtbl->Release(rt->heap);
     rt->srv_heap->lpVtbl->Release(rt->srv_heap);
 
@@ -1779,7 +1790,7 @@ void _slg_d3d12_update_render_texture(slg_render_texture* rt, UINT width,UINT he
     D3D12_RESOURCE_STATE_RENDER_TARGET,
     &clear_val,
     &IID_ID3D12Resource,
-    (void**)&rt->tex.buffer
+    (void**)&rt->tex->buffer
     ));
 
     D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {
@@ -1792,7 +1803,7 @@ void _slg_d3d12_update_render_texture(slg_render_texture* rt, UINT width,UINT he
 
     rt->heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(rt->heap,&rt->handle);
     
-    desc->device->lpVtbl->CreateRenderTargetView(desc->device,rt->tex.buffer,NULL,rt->handle);
+    desc->device->lpVtbl->CreateRenderTargetView(desc->device,rt->tex->buffer,NULL,rt->handle);
 
     D3D12_DESCRIPTOR_HEAP_DESC srv_heap_desc = {
         .NumDescriptors = 1,
@@ -1801,22 +1812,22 @@ void _slg_d3d12_update_render_texture(slg_render_texture* rt, UINT width,UINT he
     };
 
     d3d12_throwIfFailed(desc->device->lpVtbl->CreateDescriptorHeap(desc->device, &srv_heap_desc,&IID_ID3D12DescriptorHeap,(void**)&rt->srv_heap));
-    
+    rt->tex->srv_heap = rt->srv_heap;
     D3D12_CPU_DESCRIPTOR_HANDLE srv_cpu_handle;
     rt->srv_heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(rt->srv_heap, &srv_cpu_handle);
     rt->srv_heap->lpVtbl->GetGPUDescriptorHandleForHeapStart(rt->srv_heap, &rt->srv_gpu_handle);
 
-    desc->device->lpVtbl->CreateShaderResourceView(desc->device, rt->tex.buffer, NULL, srv_cpu_handle);
+    desc->device->lpVtbl->CreateShaderResourceView(desc->device, rt->tex->buffer, NULL, srv_cpu_handle);
 
-    rt->tex.width = width;
-    rt->tex.height = height;
+    rt->tex->width = width;
+    rt->tex->height = height;
 
 }
 void _slg_d3d12_update_depth_texture(slg_depth_texture* dt,UINT width,UINT height){
     slg_desc_t* desc = &slg_d3d12_state.desc;
 
     // release old resources
-    dt->tex.buffer->lpVtbl->Release(dt->tex.buffer);
+    dt->tex->buffer->lpVtbl->Release(dt->tex->buffer);
     dt->heap->lpVtbl->Release(dt->heap);
 
     D3D12_RESOURCE_DESC tex_desc = {0};
@@ -1847,7 +1858,7 @@ void _slg_d3d12_update_depth_texture(slg_depth_texture* dt,UINT width,UINT heigh
         desc->device, &heap_props, D3D12_HEAP_FLAG_NONE,
         &tex_desc, D3D12_RESOURCE_STATE_DEPTH_WRITE,
         &clear_val, &IID_ID3D12Resource,
-        (void**)&dt->tex.buffer
+        (void**)&dt->tex->buffer
     ));
 
     D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {
@@ -1857,10 +1868,10 @@ void _slg_d3d12_update_depth_texture(slg_depth_texture* dt,UINT width,UINT heigh
     };
     desc->device->lpVtbl->CreateDescriptorHeap(desc->device, &heap_desc, &IID_ID3D12DescriptorHeap, (void**)&dt->heap);
     dt->heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(dt->heap, &dt->handle);
-    desc->device->lpVtbl->CreateDepthStencilView(desc->device, dt->tex.buffer, NULL, dt->handle);
+    desc->device->lpVtbl->CreateDepthStencilView(desc->device, dt->tex->buffer, NULL, dt->handle);
 
-    dt->tex.width  = width;
-    dt->tex.height = height;
+    dt->tex->width  = width;
+    dt->tex->height = height;
 }
 
 slg_render_texture _slg_d3d12_make_render_texture(UINT width, UINT height){
@@ -1930,17 +1941,18 @@ slg_render_texture _slg_d3d12_make_render_texture(UINT width, UINT height){
     };
 
     d3d12_throwIfFailed(desc->device->lpVtbl->CreateDescriptorHeap(desc->device, &srv_heap_desc,&IID_ID3D12DescriptorHeap,(void**)&render_tex->srv_heap));
-    
+    tex->srv_heap = render_tex->srv_heap;
+
     D3D12_CPU_DESCRIPTOR_HANDLE srv_cpu_handle;
     render_tex->srv_heap->lpVtbl->GetCPUDescriptorHandleForHeapStart(render_tex->srv_heap, &srv_cpu_handle);
     render_tex->srv_heap->lpVtbl->GetGPUDescriptorHandleForHeapStart(render_tex->srv_heap, &render_tex->srv_gpu_handle);
-
+    
     desc->device->lpVtbl->CreateShaderResourceView(desc->device, tex->buffer, NULL, srv_cpu_handle);
 
     tex->width = width;
     tex->height = height;
     
-    render_tex->tex = *tex;
+    render_tex->tex = tex;
     
     return* render_tex;
 
@@ -2007,7 +2019,7 @@ slg_depth_texture _slg_d3d12_make_depth_texture(UINT width, UINT height){
     tex->width = width;
     tex->height = height;
     
-    depth_tex->tex = *tex;
+    depth_tex->tex = tex;
     
     return* depth_tex;
 }
@@ -2777,8 +2789,8 @@ void _slg_d3d12_begin_offscreen_pass(slg_pass* pass){
 
     ID3D12GraphicsCommandList* command_list = desc->commandList;
 
-    UINT width = pass->color_target.tex.width;
-    UINT height = pass->color_target.tex.height;
+    UINT width = pass->color_target.tex->width;
+    UINT height = pass->color_target.tex->height;
     D3D12_VIEWPORT vp = {0};
     vp.TopLeftX = 0;
     vp.TopLeftY = 0;
@@ -2800,7 +2812,7 @@ void _slg_d3d12_begin_offscreen_pass(slg_pass* pass){
         D3D12_RESOURCE_BARRIER barrier;
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier.Transition.pResource = pass->color_target.tex.buffer;
+        barrier.Transition.pResource = pass->color_target.tex->buffer;
         barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
         barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET; 
@@ -2897,7 +2909,7 @@ void _slg_d3d12_end_offscreen_pass(slg_pass* pass){
         .Type       = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
         .Flags      = D3D12_RESOURCE_BARRIER_FLAG_NONE,
         .Transition = {
-            .pResource   = pass->color_target.tex.buffer,  // the ID3D12Resource*
+            .pResource   = pass->color_target.tex->buffer,  // the ID3D12Resource*
             .Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
             .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
             .StateAfter  = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE
@@ -2932,6 +2944,16 @@ void _slg_d3d12_inject_render_texture(slg_render_texture* rt){
     srv_heap->lpVtbl->GetGPUDescriptorHandleForHeapStart(srv_heap, &gpu_handle);
     desc->commandList->lpVtbl->SetGraphicsRootDescriptorTable(desc->commandList, 1, gpu_handle); // slot 1 is SRV
 
+}
+void _slg_d3d12_inject_texture(slg_texture* tex){
+    slg_desc_t* desc = &slg_d3d12_state.desc;
+
+    ID3D12DescriptorHeap* srv_heap = tex->srv_heap;
+    desc->commandList->lpVtbl->SetDescriptorHeaps(desc->commandList, 1, &srv_heap);
+
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
+    srv_heap->lpVtbl->GetGPUDescriptorHandleForHeapStart(srv_heap, &gpu_handle);
+    desc->commandList->lpVtbl->SetGraphicsRootDescriptorTable(desc->commandList, 1, gpu_handle); // slot 1 is SRV
 }
 
 void _slg_d3d12_set_bindings(slg_bindings* bind){
@@ -2989,6 +3011,11 @@ OF RENDERING A RENDERTEXTURE USING AN OFFSCREEN PASS WITH IMGUI
 void slg_inject_render_texture(slg_render_texture* rt){
     #ifdef SLG_D3D12
     _slg_d3d12_inject_render_texture(rt);
+    #endif
+}
+void slg_inject_texture(slg_texture* tex){
+    #ifdef SLG_D3D12
+    _slg_d3d12_inject_texture(tex);
     #endif
 }
 void slg_set_bindings(slg_bindings* bind){
