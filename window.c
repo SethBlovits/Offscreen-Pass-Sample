@@ -53,6 +53,10 @@ struct{
 
 };
 
+int selected_button_index = -1;
+
+
+
 
 
 typedef struct Render_Window{
@@ -219,7 +223,12 @@ void init(){
     //make offscreen pass here
     //I want it to fill in all of the necessary things for me
     //so I can just call offscreen pass later
-    slg_render_texture color_render_target = slg_make_render_target(656,565);
+    slg_render_texture color_render_target = slg_make_render_target((slg_rt_desc){
+        .width = 656,
+        .height = 565,
+        .clear_color = {0.0f,0.0f,0.0f,0.5f}
+
+    });
     slg_depth_texture depth_render_target = slg_make_depth_target(656,565);
 
     slg_pipeline offscreen_pip = slg_make_pipeline(&(slg_pipeline_desc){
@@ -293,6 +302,27 @@ void init(){
     style->WindowRounding = 0.0f;
 }
 
+void check_button_index(int *current_index,int *selected_index,const char* button_name, ImVec2 region_size){
+    
+    bool selected_style = (*current_index == *selected_index);
+    
+    if(selected_style){
+        igPushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+        igPushStyleColorImVec4(ImGuiCol_Border, (ImVec4){0.78f, 0.66f, 0.43f, 1.0f});
+        igPushStyleColorImVec4(ImGuiCol_Button, (ImVec4){0.78f, 0.66f, 0.43f, 0.1f});
+        igPushStyleColorImVec4(ImGuiCol_Text, (ImVec4){1.0f, 1.0f, 1.0f, 1.0f});
+    }
+ 
+    if(igButtonEx(button_name,(ImVec2){region_size.x,region_size.y * 0.15f})){
+        *selected_index = *current_index;
+    }
+    if(selected_style){
+        igPopStyleColorEx(3);
+        igPopStyleVar();
+    }
+    (*current_index)++;
+}
+
 //breakout function for the material editor code;;
 void material_editor(){
 
@@ -350,33 +380,75 @@ void material_editor(){
         igBeginChild("Shader Preview",(ImVec2){.x = 0,.y = panel_avail.y * param_layout.shader_vert},false,ImGuiWindowFlags_None);
         {
             igSeparatorText("Shaders");
+            ImVec2 shader_size = igGetContentRegionAvail();
+            
+            igPushStyleColorImVec4(ImGuiCol_Button, (ImVec4){0.0f, 0.0f, 0.0f, 0.0f});
+            igPushStyleColorImVec4(ImGuiCol_ButtonHovered, (ImVec4){0.78f, 0.66f, 0.43f, 0.1f});
+            igPushStyleColorImVec4(ImGuiCol_ButtonActive, (ImVec4){0.78f, 0.66f, 0.43f, 0.2f});
+            igPushStyleColorImVec4(ImGuiCol_Text, (ImVec4){0.4f, 0.4f, 0.4f, 1.0f});
+            
+            int current_button_index = 0; 
+            check_button_index(&current_button_index,&selected_button_index,"Custom Shader",shader_size);
+            check_button_index(&current_button_index,&selected_button_index,"Lembertian Shading",shader_size);
 
-            igButton("Custom Shader");
-            igButton("Standard Shader");
+            igPopStyleColorEx(4);
         }
         igEndChild();
     }
     igEndChild();
     igSameLine();
     ImVec2 available_space =  igGetContentRegionAvail();
+    igPushStyleColorImVec4(ImGuiCol_ChildBg,(ImVec4){0.0f,0.0f,0.0f,1.0f});
     igBeginChild(
         "material_editor_child",
         available_space,   // fill remaining space
         false,            // no border
         ImGuiWindowFlags_None
     );
+
+    //we want to draw a grid of lines here and then draw the rt on top of it with a semitransparent alpha
+
+    ImDrawList* draw_list = igGetWindowDrawList();
+    ImVec2 grid_space = igGetContentRegionAvail();
+    ImVec2 cursor_pos = igGetCursorScreenPos();
+
+    float dominant_region = (grid_space.x > grid_space.y) ? grid_space.x : grid_space.y;
+
+    float min_y = cursor_pos.y;
+    float max_y = cursor_pos.y + dominant_region;
+
+    float min_x = cursor_pos.x;
+    float max_x = cursor_pos.x + dominant_region;
+    //we need a point from an x position from the lowest y to the highest y
+    int num_lines = 30;
+    float x_step = dominant_region / num_lines;
+    float y_step = dominant_region / num_lines;
+    for(int x = 0; x < num_lines; x++){
+        
+        float x_pos = cursor_pos.x + (x_step * x);
+        
+        ImDrawList_AddLine(draw_list,(ImVec2){.x = x_pos , .y = min_y},(ImVec2){.x = x_pos , .y = max_y},IM_COL32(200, 200, 200, 50));
+    }
+    for(int y = 0; y < num_lines; y++){
+        float y_pos = cursor_pos.y + (y_step * y);
+            
+        ImDrawList_AddLine(draw_list,(ImVec2){.x = min_x , .y = y_pos},(ImVec2){.x = max_x , .y = y_pos},IM_COL32(200, 200, 200, 50));
+    }
+
     //(ImVec2){(float)offscreen_pass.color_target.tex.width,(float)offscreen_pass.color_target.tex.height}
     if(available_space.x != offscreen_pass.color_target.tex->width || available_space.y != offscreen_pass.color_target.tex->height){
         pass_resize.changed_resolution = true;
-        pass_resize.new_width = available_space.x;
-        pass_resize.new_height = available_space.y;
+        pass_resize.new_width = (int)available_space.x;
+        pass_resize.new_height = (int)available_space.y;
     }
    
     igImage((ImTextureID)offscreen_pass.color_target.tex,available_space);
     igEndChild();
+    igPopStyleColor();
     igPopStyleVarEx(1);
 
 }
+
 void frame(){
     app_get_cursor_pos(&slimgui_input_state.mouse_x,&slimgui_input_state.mouse_y);
     slg_begin_frame();
@@ -451,7 +523,7 @@ void frame(){
 
 
     material_editor();
-    igShowDemoWindow(NULL);
+    //igShowDemoWindow(NULL);
     igEnd();
 
     slimgui_end_frame();

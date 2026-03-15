@@ -516,9 +516,18 @@ typedef slg_resource slg_texture;
 
 //for convenience sake I am going to create a render texture struct that holds onto a texture struct
 
+typedef struct{
+    unsigned int width;
+    unsigned int height;
+
+    float clear_color[4];
+
+}slg_rt_desc;
+
 typedef struct{// if we are creating the render texture inside of a function in here then we need to make a pool f
     slg_texture* tex;
     
+    float clear_color[4];
     //we also need the handles for use later
     ID3D12DescriptorHeap*       heap;   // keep alive
     D3D12_CPU_DESCRIPTOR_HANDLE handle;
@@ -1778,10 +1787,10 @@ void _slg_d3d12_update_render_texture(slg_render_texture* rt, UINT width,UINT he
 
     D3D12_CLEAR_VALUE clear_val = {0};
     clear_val.Format   = DXGI_FORMAT_R8G8B8A8_UNORM;
-    clear_val.Color[0] = 0.0f;
-    clear_val.Color[1] = 0.0f;
-    clear_val.Color[2] = 0.0f;
-    clear_val.Color[3] = 1.0f;
+    clear_val.Color[0] = rt->clear_color[0];
+    clear_val.Color[1] = rt->clear_color[1];
+    clear_val.Color[2] = rt->clear_color[2];
+    clear_val.Color[3] = rt->clear_color[3];
 
     d3d12_throwIfFailed(desc->device->lpVtbl->CreateCommittedResource(desc->device,
     &tex_heapProps,
@@ -1874,7 +1883,7 @@ void _slg_d3d12_update_depth_texture(slg_depth_texture* dt,UINT width,UINT heigh
     dt->tex->height = height;
 }
 
-slg_render_texture _slg_d3d12_make_render_texture(UINT width, UINT height){
+slg_render_texture _slg_d3d12_make_render_texture(slg_rt_desc rt_desc){
     slg_texture* tex = {0};
     tex = pool_alloc(&slg_pools.texture_pool);
 
@@ -1886,8 +1895,8 @@ slg_render_texture _slg_d3d12_make_render_texture(UINT width, UINT height){
 
     D3D12_RESOURCE_DESC textureDesc = {0};
     textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    textureDesc.Width = width;
-    textureDesc.Height = height;
+    textureDesc.Width = rt_desc.width;
+    textureDesc.Height = rt_desc.height;
     textureDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     textureDesc.DepthOrArraySize = 1;
     textureDesc.MipLevels = 1;
@@ -1906,11 +1915,15 @@ slg_render_texture _slg_d3d12_make_render_texture(UINT width, UINT height){
     // needed when ALLOW_RENDER_TARGET is set
     D3D12_CLEAR_VALUE clear_val = {0};
     clear_val.Format   = DXGI_FORMAT_R8G8B8A8_UNORM;
-    clear_val.Color[0] = 0.0f;
-    clear_val.Color[1] = 0.0f;
-    clear_val.Color[2] = 0.0f;
-    clear_val.Color[3] = 1.0f;
+    clear_val.Color[0] = rt_desc.clear_color[0];
+    clear_val.Color[1] = rt_desc.clear_color[1];
+    clear_val.Color[2] = rt_desc.clear_color[2];
+    clear_val.Color[3] = rt_desc.clear_color[3];
 
+    render_tex->clear_color[0] = rt_desc.clear_color[0];
+    render_tex->clear_color[1] = rt_desc.clear_color[1];
+    render_tex->clear_color[2] = rt_desc.clear_color[2];
+    render_tex->clear_color[3] = rt_desc.clear_color[3];
     d3d12_throwIfFailed(desc->device->lpVtbl->CreateCommittedResource(desc->device,
     &tex_heapProps,
     D3D12_HEAP_FLAG_NONE,
@@ -1949,8 +1962,8 @@ slg_render_texture _slg_d3d12_make_render_texture(UINT width, UINT height){
     
     desc->device->lpVtbl->CreateShaderResourceView(desc->device, tex->buffer, NULL, srv_cpu_handle);
 
-    tex->width = width;
-    tex->height = height;
+    tex->width = rt_desc.width;
+    tex->height = rt_desc.height;
     
     render_tex->tex = tex;
     
@@ -2566,10 +2579,10 @@ void slg_update_depth_texture(slg_depth_texture* dt,UINT width, UINT height){
     #endif
 }
 
-slg_render_texture slg_make_render_target(UINT width,UINT height){
+slg_render_texture slg_make_render_target(slg_rt_desc rt_desc){
     slg_render_texture tex;
     #ifdef SLG_D3D12
-    tex = _slg_d3d12_make_render_texture(width,height);
+    tex = _slg_d3d12_make_render_texture(rt_desc);
     #endif
     return tex;
 }
@@ -2819,11 +2832,9 @@ void _slg_d3d12_begin_offscreen_pass(slg_pass* pass){
         command_list->lpVtbl->ResourceBarrier(command_list, 1, &barrier);
     }   
 
-    
-    const float clearColor[] = {0.0f,0.0f,0.0f,1.0f};
 
     command_list->lpVtbl->OMSetRenderTargets(command_list,1,&pass->color_target.handle,false,&pass->depth_target.handle);
-    command_list->lpVtbl->ClearRenderTargetView(command_list,pass->color_target.handle,clearColor,0,NULL);
+    command_list->lpVtbl->ClearRenderTargetView(command_list,pass->color_target.handle,pass->color_target.clear_color,0,NULL);
     command_list->lpVtbl->ClearDepthStencilView(command_list,
         pass->depth_target.handle,
         D3D12_CLEAR_FLAG_DEPTH,
@@ -2875,7 +2886,7 @@ void _slg_d3d12_begin_pass(){
     //frame_buf.frame_context[frame_buf.frameIndex].depthHandle;
     //frame_buf.depthStencilHeap->lpVtbl->GetCPUDescriptorHandleForHeapStart(frame_buf.depthStencilHeap,&depthHandle);
     command_list->lpVtbl->OMSetRenderTargets(command_list,1,&rtvHandle,false,&depthHandle);
-    const float clearColor[] = {0.0f,0.2f,0.4f,1.0f};
+    const float clearColor[] = {0.0f,0.0f,0.0f,0.5f};
     command_list->lpVtbl->ClearRenderTargetView(command_list,rtvHandle,clearColor,0,NULL);
     command_list->lpVtbl->ClearDepthStencilView(command_list,
         depthHandle,
