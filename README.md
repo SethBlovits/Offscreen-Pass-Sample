@@ -7,7 +7,6 @@ Uses some of my other header utilities to open a window and draw things.
 BUILDING:
 
 It will be difficult to build this, the shader compiler utility isn't in here yet.
-
-![screenshot]([https://github.com/username/repo/raw/main/screenshot.png](https://github.com/SethBlovits/Offscreen-Pass-Sample/blob/main/ui_new.JPG))
+![screenshot](https://raw.githubusercontent.com/SethBlovits/Offscreen-Pass-Sample/main/ui_new.JPG) Sonnet 4.6Claude is AI and can make mistakes. Please double-check responses.Material editor · JSXCopy
 
 
