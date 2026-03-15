@@ -8,6 +8,6 @@ BUILDING:
 
 It will be difficult to build this, the shader compiler utility isn't in here yet.
 
-![screenshot](https://github.com/username/repo/raw/main/screenshot.png)
+![screenshot]([https://github.com/username/repo/raw/main/screenshot.png](https://github.com/SethBlovits/Offscreen-Pass-Sample/blob/main/ui_new.JPG))
 
 
