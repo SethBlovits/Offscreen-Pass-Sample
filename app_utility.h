@@ -10,6 +10,15 @@
 #endif
 
 #define INVALID 0
+
+struct {
+    LARGE_INTEGER frequency;
+    LARGE_INTEGER previous_time;
+    LARGE_INTEGER current_time;
+    float delta_time;
+} app_time;
+
+
 typedef enum APP_EVENT_CODE{
     APP_EVENT_MOUSE_MOVE = 1,
     APP_EVENT_MOUSE_LEFT_BUTTON_DOWN = 2,
@@ -274,8 +283,12 @@ int _conv_event_Win32(int win_event_code,WPARAM wparam,app_event_t* event){
 void _create_window_Win32(int width, int height){
     const char CLASS_NAME[] = "Window Class";
 
+    QueryPerformanceFrequency(&app_time.frequency);
+    QueryPerformanceCounter(&app_time.previous_time);
     HINSTANCE hInstance = GetModuleHandle(NULL);
     WNDCLASSEX wc;
+
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     wc.cbSize        = sizeof(WNDCLASSEX);
     wc.style         = CS_HREDRAW|CS_VREDRAW;
     wc.lpfnWndProc   = _event_callback_Win32;
@@ -330,8 +343,9 @@ void _app_frame_loop_Win32(){
     ShowWindow(app_data_d3d12.hwnd,SW_SHOWNORMAL);
     UpdateWindow(app_data_d3d12.hwnd);
     while(true){
-        LARGE_INTEGER current_time;
-        QueryPerformanceCounter(&current_time);
+        QueryPerformanceCounter(&app_time.current_time);
+        app_time.delta_time = (float)(app_time.current_time.QuadPart-app_time.previous_time.QuadPart)/app_time.frequency.QuadPart;
+        app_time.previous_time = app_time.current_time;
         MSG msg;
         while(PeekMessage(&msg,NULL,0,0,PM_REMOVE)){
             if(msg.message == WM_QUIT){
@@ -417,6 +431,9 @@ void app_get_cursor_pos(int* x,int* y){
     #endif
 }
 
+inline float app_get_delta_time(){
+    return app_time.delta_time;
+}
 void app_init(app_desc_t app_desc){
     app_init_func = app_desc.init_func;
     app_frame_func = app_desc.frame_func;

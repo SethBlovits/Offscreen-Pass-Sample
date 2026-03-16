@@ -55,10 +55,6 @@ struct{
 
 int selected_button_index = -1;
 
-
-
-
-
 typedef struct Render_Window{
     int width;
     int height;
@@ -265,15 +261,13 @@ void init(){
         .usage = SLG_BUFFER_USAGE_CONSTANT_BUFFER
     });
 
-
-
     slg_bindings offscreen_bindings = slg_make_bindings(&(slg_bindings_desc){
         .index_buffer = index_buffer,
         .vertex_buffer = vertex_buffer,
         .uniforms = OFFSCREEN_PASS_HLSL_MAKE_UNIFORMS((OFFSCREEN_PASS_HLSL_UNIFORMS){
             .albedo = texture,
             .TransformBuffer = transform_buffer,
-            .LightPositions = light_buffer
+            .LightPositions = light_buffer,
         })
     });
 
@@ -321,6 +315,25 @@ void check_button_index(int *current_index,int *selected_index,const char* butto
         igPopStyleVar();
     }
     (*current_index)++;
+}
+
+bool is_mouse_inside_widget(ImVec2 start_pos, ImVec2 size){
+
+    //ImGuiIO* io = igGetIO();
+    ImVec2 mouse_pos = io->MousePos;
+
+    ImVec2 end_pos = (ImVec2){
+        .x = {start_pos.x + size.x},
+        .y = {start_pos.y + size.y}
+    };
+    if(mouse_pos.x < start_pos.x || mouse_pos.x > (end_pos.x)){
+        return false;
+    }
+    if(mouse_pos.y < start_pos.y || mouse_pos.y > (end_pos.y)){
+        return false;
+    }
+
+    return true;
 }
 
 //breakout function for the material editor code;;
@@ -373,6 +386,12 @@ void material_editor(){
             igSliderFloat("Light Y", &main_light.position.Elements[1], -20.0f, 20.0f);
             igSliderFloat("Light Z", &main_light.position.Elements[2], -20.0f, 20.0f);
             igPopStyleVarEx(2);
+            float delta_time = app_get_delta_time();
+            igText("Left Mouse Down: %d",igIsMouseDown(ImGuiMouseButton_Left));
+            ImVec2 mouse_delta = igGetMouseDragDelta(ImGuiMouseButton_Left,-1.0f);
+            igText("Mouse Delta: (%0.2f,%0.2f)",mouse_delta.x,mouse_delta.y);
+            igText("Mouse Delta/Time: (%0.2f,%0.2f)", mouse_delta.x*delta_time,mouse_delta.y*delta_time);
+            igText("Delta Time: %0.5f",delta_time);
 
         }
         igEndChild();
@@ -400,7 +419,7 @@ void material_editor(){
     ImVec2 available_space =  igGetContentRegionAvail();
     igPushStyleColorImVec4(ImGuiCol_ChildBg,(ImVec4){0.0f,0.0f,0.0f,1.0f});
     igBeginChild(
-        "material_editor_child",
+        "Grid Window",
         available_space,   // fill remaining space
         false,            // no border
         ImGuiWindowFlags_None
@@ -446,6 +465,16 @@ void material_editor(){
     igEndChild();
     igPopStyleColor();
     igPopStyleVarEx(1);
+
+    //code to check if mouse is inside the grid
+
+    bool is_inside = is_mouse_inside_widget(cursor_pos,grid_space);
+    
+    if(is_inside)
+    {
+        ImVec2 mouse_delta = igGetMouseDragDelta(ImGuiMouseButton_Left,-1.0f);
+        
+    }
 
 }
 
